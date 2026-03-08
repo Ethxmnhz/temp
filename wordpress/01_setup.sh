@@ -98,12 +98,16 @@ echo "[*] Initializing exposed .git repository..."
 cd /var/www/html
 set +e
 if [ ! -d /var/www/html/.git ]; then
-    git init
-    git config user.email "devops@hexadynamics.local"
-    git config user.name "DevOps Team"
-    git config init.defaultBranch main 2>/dev/null || true
+    # Configure git globally to avoid safe.directory issues
+    git config --global init.defaultBranch main
+    git config --global user.email "devops@hexadynamics.local"
+    git config --global user.name "DevOps Team"
+    git config --global --add safe.directory /var/www/html
 
-    cat > migration_notes.txt << 'GITEOF'
+    git init /var/www/html
+
+    # First commit: migration notes with leaked creds
+    cat > /var/www/html/migration_notes.txt << 'GITEOF'
 HexaDynamics Infrastructure Migration Notes
 ============================================
 Date: 2025-11-15
@@ -117,14 +121,21 @@ FLAG{GIT_HISTORY_EXPOSED_creds_leaked}
 TODO: Remove these creds before production deployment.
 GITEOF
 
-    git add migration_notes.txt 2>/dev/null || true
-    git commit -m "Added migration notes during infrastructure migration" 2>/dev/null || true
+    git -C /var/www/html add migration_notes.txt
+    git -C /var/www/html commit -m "Added migration notes during infrastructure migration"
 
-    # Remove from working tree but keep in git history
-    rm -f migration_notes.txt
-    git add migration_notes.txt 2>/dev/null || true
-    git commit -m "Cleaned up migration artifacts — removed temp creds" 2>/dev/null || true
-    echo "[+] Git repository initialized with credential history."
+    # Second commit: remove from working tree but keep in git history
+    rm -f /var/www/html/migration_notes.txt
+    git -C /var/www/html add migration_notes.txt
+    git -C /var/www/html commit -m "Cleaned up migration artifacts — removed temp creds"
+
+    # Verify commits exist
+    COMMIT_COUNT=$(git -C /var/www/html rev-list --count HEAD 2>/dev/null || echo 0)
+    if [ "$COMMIT_COUNT" -ge 2 ]; then
+        echo "[+] Git repository initialized with $COMMIT_COUNT commits (credential history intact)."
+    else
+        echo "[!] WARNING: Git repo has only $COMMIT_COUNT commits — history may be incomplete!"
+    fi
 else
     echo "[+] Git repository already exists."
 fi
@@ -170,6 +181,7 @@ cat > /etc/apache2/conf-available/hexadynamics.conf << 'APACHEEOF'
 
 <Directory /var/www/html/.git>
     Options Indexes FollowSymLinks
+    AllowOverride None
     Require all granted
 </Directory>
 
@@ -228,6 +240,28 @@ if [ -d "$PLUGIN_DIR" ]; then
         echo "    Contents of $PLUGIN_DIR:"
         ls -la "$PLUGIN_DIR"/ 2>/dev/null || true
     fi
+
+    # Ensure connector.minimal.php exists (CVE-2020-25213 endpoint)
+    if [ -f "$PLUGIN_DIR/lib/php/connector.minimal.php" ]; then
+        echo "[+] connector.minimal.php found — exploit endpoint ready."
+    else
+        echo "[!] WARNING: connector.minimal.php NOT found at $PLUGIN_DIR/lib/php/"
+        echo "    Searching for it..."
+        CONNECTOR=$(find "$PLUGIN_DIR" -name 'connector.minimal.php' -type f 2>/dev/null | head -1)
+        if [ -n "$CONNECTOR" ]; then
+            echo "[+] Found at: $CONNECTOR"
+            mkdir -p "$PLUGIN_DIR/lib/php"
+            cp "$CONNECTOR" "$PLUGIN_DIR/lib/php/connector.minimal.php"
+        else
+            echo "[!] CRITICAL: connector.minimal.php not found anywhere in plugin!"
+        fi
+    fi
+
+    # Ensure lib/files directory exists and is writable (upload destination for exploit)
+    mkdir -p "$PLUGIN_DIR/lib/files"
+    chown -R www-data:www-data "$PLUGIN_DIR/lib/files"
+    chmod 777 "$PLUGIN_DIR/lib/files"
+    echo "[+] lib/files directory ready for uploads."
 else
     echo "[!] Plugin directory not found at $PLUGIN_DIR"
 fi

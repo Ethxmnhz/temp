@@ -91,21 +91,20 @@ RUN PYTHON3_BIN=$(readlink -f $(which python3)) && setcap cap_setuid+ep "$PYTHON
 RUN echo "FLAG{ROOT_PRIVESC_python3_cap_setuid}" > /root/flag.txt \
     && chmod 600 /root/flag.txt
 
+# Copy corporate site, PDF generator, and setup scripts
+COPY corporate-site/ /corporate-site/
+COPY generate_pdfs.py /generate_pdfs.py
+
 # Copy setup script and fix Windows line endings
 COPY 01_setup.sh /01_setup.sh
-RUN sed -i 's/\r$//' /01_setup.sh && chmod +x /01_setup.sh
+RUN sed -i 's/\r$//' /01_setup.sh && chmod +x /01_setup.sh \
+    && sed -i 's/\r$//' /generate_pdfs.py
 
 # Copy custom entrypoint and fix Windows line endings
 COPY custom-entrypoint.sh /custom-entrypoint.sh
 RUN sed -i 's/\r$//' /custom-entrypoint.sh && chmod +x /custom-entrypoint.sh
 
-# Copy PDF generator
-COPY generate_pdfs.py /generate_pdfs.py
-
-# Copy corporate site
-COPY corporate-site/index.html /corporate-site/index.html
+ENTRYPOINT ["/custom-entrypoint.sh"]
+CMD ["apache2-foreground"]
 
 EXPOSE 80 22
-
-ENTRYPOINT ["/custom-entrypoint.sh"]
-CMD []

@@ -56,4 +56,4 @@ echo "  SSH:  ssh marketing@localhost -p 2222"
 echo "============================================"
 
 # Start Apache in the foreground
-exec apache2-foreground
+exec "$@"
