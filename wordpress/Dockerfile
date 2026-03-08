@@ -38,39 +38,35 @@ RUN set -e; \
     echo "[*] Installing WP File Manager from local ZIP..."; \
     unzip -o /tmp/wp-file-manager-local.zip -d /tmp/wp-fm-extract; \
     rm -f /tmp/wp-file-manager-local.zip; \
-    echo "[*] Outer ZIP contents:"; \
-    find /tmp/wp-fm-extract -type f | head -20; \
-    # Keep extracting any nested zips until we find the plugin PHP or run out of zips
+    # Keep extracting any nested ZIPs until no more remain
     for attempt in 1 2 3; do \
-        MAIN_PHP=$(find /tmp/wp-fm-extract -name 'wp-file-manager.php' -type f | head -1); \
-        if [ -n "$MAIN_PHP" ]; then break; fi; \
         INNER_ZIP=$(find /tmp/wp-fm-extract -name '*.zip' -type f | head -1); \
         if [ -z "$INNER_ZIP" ]; then break; fi; \
-        echo "[*] Attempt $attempt: Found inner zip: $INNER_ZIP — extracting..."; \
-        unzip -o "$INNER_ZIP" -d /tmp/wp-fm-inner; \
+        echo "[*] Attempt $attempt: extracting inner zip: $INNER_ZIP"; \
+        unzip -o "$INNER_ZIP" -d "$(dirname "$INNER_ZIP")"; \
         rm -f "$INNER_ZIP"; \
-        cp -a /tmp/wp-fm-inner/. /tmp/wp-fm-extract/ 2>/dev/null || true; \
-        rm -rf /tmp/wp-fm-inner; \
-        echo "[*] Contents after extraction:"; \
-        find /tmp/wp-fm-extract -type f -name '*.php' | head -10; \
     done; \
-    MAIN_PHP=$(find /tmp/wp-fm-extract -name 'wp-file-manager.php' -type f | head -1); \
+    # The plugin main file is file_folder_manager.php (not wp-file-manager.php)
+    MAIN_PHP=$(find /tmp/wp-fm-extract -name 'file_folder_manager.php' -type f | head -1); \
     if [ -z "$MAIN_PHP" ]; then \
-        echo "ERROR: Could not find wp-file-manager.php after extracting all ZIPs"; \
-        echo "Full directory listing:"; \
-        find /tmp/wp-fm-extract -type f | sort; \
+        MAIN_PHP=$(find /tmp/wp-fm-extract -name 'wp-file-manager.php' -type f | head -1); \
+    fi; \
+    if [ -z "$MAIN_PHP" ]; then \
+        echo "ERROR: Could not find plugin main PHP file"; \
+        find /tmp/wp-fm-extract -type f -name '*.php' | sort; \
         exit 1; \
     fi; \
     PLUGIN_SRC=$(dirname "$MAIN_PHP"); \
-    echo "[+] Found plugin at: $PLUGIN_SRC"; \
+    echo "[+] Found plugin at: $PLUGIN_SRC (main: $(basename $MAIN_PHP))"; \
     rm -rf /usr/src/wordpress/wp-content/plugins/wp-file-manager; \
     cp -a "$PLUGIN_SRC" /usr/src/wordpress/wp-content/plugins/wp-file-manager; \
     rm -rf /tmp/wp-fm-extract; \
-    chown -R www-data:www-data /usr/src/wordpress/wp-content/plugins/wp-file-manager; \
-    echo "[+] WP File Manager installed successfully"; \
-    echo "[+] Plugin files:"; \
-    ls /usr/src/wordpress/wp-content/plugins/wp-file-manager/wp-file-manager.php; \
-    find /usr/src/wordpress/wp-content/plugins/wp-file-manager -name 'connector.minimal.php' -type f | head -1
+    # WordPress needs the plugin registered as wp-file-manager/file_folder_manager.php
+    DEST=/usr/src/wordpress/wp-content/plugins/wp-file-manager; \
+    chown -R www-data:www-data "$DEST"; \
+    echo "[+] WP File Manager installed. Key files:"; \
+    ls "$DEST"/file_folder_manager.php 2>/dev/null || ls "$DEST"/wp-file-manager.php 2>/dev/null; \
+    ls "$DEST"/lib/php/connector.minimal.php
 
 # Create marketing user with flag in home directory
 RUN useradd -m -s /bin/bash marketing \

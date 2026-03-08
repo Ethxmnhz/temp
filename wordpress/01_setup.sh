@@ -232,11 +232,13 @@ if [ -d "$PLUGIN_DIR" ]; then
 
     chown -R www-data:www-data "$PLUGIN_DIR"
 
-    # Verify plugin main file exists
-    if [ -f "$PLUGIN_DIR/wp-file-manager.php" ]; then
+    # Verify plugin main file exists (this version uses file_folder_manager.php)
+    if [ -f "$PLUGIN_DIR/file_folder_manager.php" ]; then
+        echo "[+] Plugin main file found: file_folder_manager.php"
+    elif [ -f "$PLUGIN_DIR/wp-file-manager.php" ]; then
         echo "[+] Plugin main file found: wp-file-manager.php"
     else
-        echo "[!] WARNING: wp-file-manager.php NOT found in plugin directory!"
+        echo "[!] WARNING: Plugin main PHP file NOT found!"
         echo "    Contents of $PLUGIN_DIR:"
         ls -la "$PLUGIN_DIR"/ 2>/dev/null || true
     fi
@@ -291,8 +293,16 @@ if [ $ACTIVATION_RETRIES -ge 3 ]; then
         require_once('${WP_PATH}/wp-config.php');
         require_once('${WP_PATH}/wp-load.php');
         \$active = get_option('active_plugins', array());
-        if (!in_array('wp-file-manager/wp-file-manager.php', \$active)) {
-            \$active[] = 'wp-file-manager/wp-file-manager.php';
+        # Check both possible main file names
+        \$found = false;
+        foreach (['wp-file-manager/file_folder_manager.php', 'wp-file-manager/wp-file-manager.php'] as \$p) {
+            if (in_array(\$p, \$active)) { \$found = true; break; }
+        }
+        if (!\$found) {
+            \$main = file_exists('${WP_PATH}/wp-content/plugins/wp-file-manager/file_folder_manager.php')
+                ? 'wp-file-manager/file_folder_manager.php'
+                : 'wp-file-manager/wp-file-manager.php';
+            \$active[] = \$main;
             update_option('active_plugins', \$active);
             echo '[+] Plugin force-activated via database.';
         } else {
