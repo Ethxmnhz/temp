@@ -141,12 +141,50 @@ else
 fi
 set -e
 
-# ── Plant flag in wp-config.php (post-exploitation discovery) ──
+# ── Rewrite wp-config.php with hardcoded credentials (visible during post-exploitation) ──
+echo "[*] Rewriting wp-config.php with hardcoded credentials..."
 if [ -f "$WP_PATH/wp-config.php" ]; then
-    if ! grep -q "FLAG{" "$WP_PATH/wp-config.php" 2>/dev/null; then
-        echo "" >> "$WP_PATH/wp-config.php"
-        echo "/* FLAG{WP_CONFIG_DB_CREDS_EXPOSED} */" >> "$WP_PATH/wp-config.php"
-    fi
+    cat > "$WP_PATH/wp-config.php" << 'WPCONFIGEOF'
+<?php
+/**
+ * The base configuration for WordPress (HexaDynamics Intranet)
+ * Generated during Docker migration — Nov 2025
+ */
+
+// ** Database settings ** //
+define( 'DB_NAME', 'wordpress' );
+define( 'DB_USER', 'wp_user' );
+define( 'DB_PASSWORD', 'WpDb@2026!' );
+define( 'DB_HOST', 'db' );
+define( 'DB_CHARSET', 'utf8' );
+define( 'DB_COLLATE', '' );
+
+/**
+ * Authentication unique keys and salts.
+ */
+define( 'AUTH_KEY',         'hexa-auth-key-2026-rAnDoM' );
+define( 'SECURE_AUTH_KEY',  'hexa-secure-auth-key-2026-XyZ' );
+define( 'LOGGED_IN_KEY',    'hexa-logged-in-key-2026-AbC' );
+define( 'NONCE_KEY',        'hexa-nonce-key-2026-DeF' );
+define( 'AUTH_SALT',        'hexa-auth-salt-2026-GhI' );
+define( 'SECURE_AUTH_SALT', 'hexa-secure-salt-2026-JkL' );
+define( 'LOGGED_IN_SALT',   'hexa-logged-salt-2026-MnO' );
+define( 'NONCE_SALT',       'hexa-nonce-salt-2026-PqR' );
+
+$table_prefix = 'wp_';
+
+define( 'WP_DEBUG', false );
+
+/* That's all, stop editing! Happy publishing. */
+if ( ! defined( 'ABSPATH' ) ) {
+    define( 'ABSPATH', __DIR__ . '/' );
+}
+require_once ABSPATH . 'wp-settings.php';
+
+/* FLAG{WP_CONFIG_DB_CREDS_EXPOSED} */
+WPCONFIGEOF
+    chown www-data:www-data "$WP_PATH/wp-config.php"
+    echo "[+] wp-config.php rewritten with hardcoded credentials and flag."
 fi
 
 # ── Plant flag accessible via RCE (webshell/file manager exploitation) ──
